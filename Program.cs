@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Xml;
-
+using System.Security.Permissions;
 
 
 namespace CS1
@@ -10,12 +8,11 @@ namespace CS1
     class Program
     {
         
-       // [STAThread]
         static void Main()
         {
             DirInfo dirInfo = new DirInfo();
-            var n = (double)dirInfo.rootDirectory.Size/1024;
-            HTMLMaker htmlMaker = new HTMLMaker(dirInfo.rootDirectory);
+            new HTMLMaker(dirInfo.RootDirectory);
+            //Console.Read();
         }
         
 
@@ -29,7 +26,6 @@ namespace CS1
             public List<Dir> ChildDirs { get; set; }
             public List<Fl> Files { get; set; }
             public long Size { get; set; }
-            public long KBSize { get; set; } 
             public Dir()
             {
                 Name = "";
@@ -37,7 +33,6 @@ namespace CS1
                 ChildDirs = new List<Dir>();
                 Files = new List<Fl>();
                 Size = 0;
-                KBSize = 0;
             }
             public Dir(string name, string path, List<Dir> dirs, List<Fl> files, int size)
             {
@@ -46,7 +41,6 @@ namespace CS1
                 ChildDirs = new List<Dir>(dirs);
                 Files = new List<Fl>(files);
                 Size = size;
-                KBSize = size / 1024;
             }
             public Dir(string name, string path, List<Dir> dirs, List<Fl> files)
             {
@@ -65,7 +59,6 @@ namespace CS1
                     filesSize += file.Size;
                 }
                 Size = dirsSize += filesSize;
-                KBSize = Size / 1024;
             }
             public Dir(Dir dir)
             {
@@ -81,7 +74,6 @@ namespace CS1
             public string Name { get; set; }
             public string Path { get; set; }
             public long Size { get; set; }
-            public long KBSize { get; set; }
             public string Mimetype { get; set; }
             public Fl()
             {
@@ -95,7 +87,6 @@ namespace CS1
                 Name = file.Name;
                 Path = file.Path;
                 Size = file.Size;
-                KBSize = file.KBSize;
                 Mimetype = file.Mimetype;
             }
             public Fl(string name, string path, long size, string mimetype)
@@ -103,11 +94,10 @@ namespace CS1
                 Name = name;
                 Path = path;
                 Size = size;
-                KBSize = size / 1024;
                 Mimetype = mimetype;
             }
         }
-        public Dir rootDirectory = null;
+        public Dir RootDirectory = null;
         public DirInfo()
         {
             string root = Directory.GetCurrentDirectory();
@@ -115,7 +105,7 @@ namespace CS1
             List<Fl> childFiles = new List<Fl>(GetChildFiles(root));
             string rootDirectoryName = root.Substring(root.LastIndexOf("\\")+1);
             string rootDirectoryPath = root.Substring(0, root.LastIndexOf("\\"));
-            rootDirectory = new Dir(rootDirectoryName, rootDirectoryPath, childDirectories, childFiles);
+            RootDirectory = new Dir(rootDirectoryName, rootDirectoryPath, childDirectories, childFiles);
             
         }
         private List<string> PathCutter(List<string> dirs, string pathName) // выделяет имя от полного пути
@@ -135,6 +125,7 @@ namespace CS1
         {
             List<Dir> childDirectories = new List<Dir>();
             var childDirsPaths = Directory.GetDirectories(rootPath);
+            
             foreach(string path in childDirsPaths)
             {
                 List<Dir> childDirs = GetChildDirectories(path);
@@ -161,7 +152,7 @@ namespace CS1
 
     class HTMLMaker // Класс создания списка на HTML
     {
-        private List<DirInfo.Fl> fls = new List<DirInfo.Fl>();
+        private readonly List<DirInfo.Fl> Fls = new List<DirInfo.Fl>();
         public HTMLMaker(DirInfo.Dir rootDirectory)
         { 
             FileStream file = new FileStream(rootDirectory.Path + "\\" + rootDirectory.Name + "\\resulthtml.html", FileMode.Create);
@@ -183,7 +174,7 @@ namespace CS1
                 foreach(DirInfo.Dir directory in rootDirectory.ChildDirs)
                 {
                     string directoryText = "<li><table><tr>";
-                    directoryText += ("<td width="+ '\u0022' +"200"+ '\u0022' +"> " + directory.Name + "</td><td width=" + '\u0022' + "100" + '\u0022' + ">" + directory.KBSize + "KB</td></tr></table></li>\n");
+                    directoryText += ("<td width="+ '\u0022' +"200"+ '\u0022' +"> " + directory.Name + "</td><td width=" + '\u0022' + "100" + '\u0022' + ">" + directory.Size/1024 + "KB</td></tr></table></li>\n");
                     directoryText += DirectoryMaker(directory);
                     directories += directoryText;
                 }
@@ -208,9 +199,9 @@ namespace CS1
             foreach (DirInfo.Fl file in rootDirectory.Files)
             {
                 string fileText = "<li><table><tr>";
-                fileText += ("<td width=" + '\u0022' + "200" + '\u0022' + ">" + file.Name + "</td><td width=" + '\u0022' + "100" + '\u0022' + ">" + file.KBSize + "KB</td><td>" + file.Mimetype + "</td></tr></table></li>\n");
+                fileText += ("<td width=" + '\u0022' + "200" + '\u0022' + ">" + file.Name + "</td><td width=" + '\u0022' + "100" + '\u0022' + ">" + file.Size/1024 + "KB</td><td>" + file.Mimetype + "</td></tr></table></li>\n");
                 files += fileText;
-                fls.Add(file);
+                Fls.Add(file);
             }
             files += "</ul>\n";
             return files;
@@ -218,10 +209,10 @@ namespace CS1
     }
     class MimeCounter // класс отвечающий за расчеты Mime типов
     {
-        class MimeType
+        private class MimeType
         {
             public string Name;
-            public int Counter;
+            public ulong Counter;
             public long Size;
             public MimeType(string name, long size)
             {
@@ -251,16 +242,16 @@ namespace CS1
                     types.Add(new MimeType(file.Mimetype, file.Size));
                 }
             }
-            string mimesString = "<table>\n<tr><td>Название</td><td>Количественное соотношение</td><td>Процентное соотношение</td><td>Средний размер, KB</td></tr>\n";
+            string mimesString = "<table>\n<tr><td>Name</td><td>Number ratio</td><td>Ratio in percent</td><td>Average size KB</td></tr>\n";
             foreach (MimeType type in types)
             {
-                string mimeString = "<tr><td>" + type.Name + "</td><td>" + type.Counter + "/" + files.Count + "</td><td>" + 100 * Math.Round((double)type.Counter / files.Count, 2) + "%</td><td>" + (int)(type.Size / files.Count)/1024 + "</td></tr>\n";
+                string mimeString = "<tr><td>" + type.Name + "</td><td>" + type.Counter + "/" + files.Count + "</td><td>" + 100 * System.Math.Round((double)type.Counter / files.Count, 2) + "%</td><td>" + (int)(type.Size / files.Count)/1024 + "</td></tr>\n";
                 mimesString += mimeString;
             }
             mimesString += "</table>";
             return mimesString;
         }
-        List<DirInfo.Fl> MimeTaker(List<DirInfo.Fl> files)
+        private List<DirInfo.Fl> MimeTaker(List<DirInfo.Fl> files)
         {
             foreach(DirInfo.Fl file in files)
             {
@@ -268,7 +259,7 @@ namespace CS1
             }
             return files;
         }
-        DirInfo.Fl MimeTaker(DirInfo.Fl file)
+        private DirInfo.Fl MimeTaker(DirInfo.Fl file)
         {
             file.Mimetype = file.Mimetype.Substring(0, file.Mimetype.IndexOf('/'));
             return file;
